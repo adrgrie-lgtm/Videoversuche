@@ -984,7 +984,7 @@
     ctx.fillStyle = "rgba(247,242,232,0.5)";
     ctx.font = "600 " + Math.round(baseR * 0.16) + "px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(trackName() || "VIDEOSCHMIEDE", 0, baseR * 1.42);
+    ctx.fillText(trackName() || "VIDEOVERSUCHE", 0, baseR * 1.42);
     ctx.restore();
     stVig(a, 0.45); stGrain(a, 0.03);
   }
@@ -1106,7 +1106,7 @@
     var p2 = function (v) { return (v < 10 ? "0" : "") + v; };
     ctx.fillText("REC ● " + p2(mm) + ":" + p2(ss) + ":" + p2(ff), W * 0.05, H * 0.055);
     ctx.textAlign = "right";
-    ctx.fillText(trackName().toUpperCase() || "VIDEOSCHMIEDE", W * 0.95, H * 0.055);
+    ctx.fillText(trackName().toUpperCase() || "VIDEOVERSUCHE", W * 0.95, H * 0.055);
     ctx.textAlign = "left";
     stVig(a, 0.62); stGrain(a, 0.06);
   }
@@ -1129,7 +1129,7 @@
     ctx.fillRect(W / 2 - size * 0.9, H * 0.5 + size * 0.55, size * 1.8, 3);
     ctx.font = "600 15px sans-serif";
     ctx.fillStyle = "rgba(247,242,232,0.75)";
-    ctx.fillText("VIDEOSCHMIEDE · VISUAL-STIL", W / 2, H * 0.5 + size * 0.95);
+    ctx.fillText("VIDEOVERSUCHE · VISUAL-STIL", W / 2, H * 0.5 + size * 0.95);
     ctx.restore();
   }
   var STYLE_DRAWERS = { neongrid: drawNeonGrid, particles: drawParticles, spectrum: drawSpectrum, vinyl: drawVinyl, cinematic: drawCinematic };
