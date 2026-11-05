@@ -1,0 +1,515 @@
+
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Collage-Spalter – Collage in Einzelbilder zerlegen</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b0914; --bg2: #110d1f; --card: #151027; --line: rgba(255,255,255,0.08);
+    --txt: #edeae4; --mut: #9aa0ac; --amb: #8b5cf6; --amb2: #c4b5fd;
+  }
+  html { scroll-behavior: smooth; }
+  body { background: radial-gradient(1200px 600px at 70% -10%, rgba(139,92,246,0.10), transparent 60%), var(--bg);
+    color: var(--txt); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+  header { position: sticky; top: 0; z-index: 40; backdrop-filter: blur(10px);
+    background: rgba(11,9,20,0.80); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; gap: 26px; padding: 14px 0; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: 0.02em; }
+  .logo svg { width: 26px; height: 26px; }
+  .nav a { color: var(--mut); text-decoration: none; font-size: 14px; }
+  .nav a:hover { color: var(--amb2); }
+  .btn { display: inline-block; border: none; cursor: pointer; font-weight: 700; border-radius: 10px;
+    background: linear-gradient(180deg, var(--amb2), var(--amb)); color: #1b1130; padding: 11px 20px; font-size: 15px;
+    box-shadow: 0 6px 22px rgba(139,92,246,0.25); transition: transform 0.15s ease, box-shadow 0.15s ease;
+    font-family: inherit; text-decoration: none; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(139,92,246,0.35); }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; box-shadow: none; }
+  .btn.ghost { background: transparent; color: var(--amb2); border: 1px solid rgba(139,92,246,0.5); box-shadow: none; }
+  .btn.small { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+  .hero { padding: 52px 0 26px; text-align: center; }
+  .hero h1 { font-size: clamp(30px, 5vw, 48px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.12; }
+  .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--amb2), var(--amb) 70%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p.sub { color: var(--mut); font-size: clamp(15px, 2vw, 18px); max-width: 680px; margin: 14px auto 0; }
+  .studio { margin: 24px 0 40px; }
+  .card { background: linear-gradient(180deg, var(--card), var(--bg2)); border: 1px solid var(--line);
+    border-radius: 20px; padding: 26px; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
+  .card h2 { font-size: 15px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amb2); margin-bottom: 14px; }
+  .zone { display: block; border: 2px dashed rgba(139,92,246,0.35); border-radius: 14px; background: rgba(139,92,246,0.04);
+    padding: 26px 18px; text-align: center; cursor: pointer; transition: all 0.15s ease; }
+  .zone:hover, .zone.drag { border-color: var(--amb); background: rgba(139,92,246,0.10); }
+  .zone .big { font-size: 30px; }
+  .zone p { color: var(--mut); font-size: 14px; margin-top: 6px; }
+  .zone b { color: var(--amb2); font-size: 15px; display: block; }
+  .markwrap { margin-top: 14px; display: none; }
+  .markwrap.on { display: block; }
+  canvas#mark { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; cursor: crosshair; touch-action: none; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .bar .cnt { font-size: 14px; color: var(--amb2); font-weight: 700; }
+  select { background: rgba(0,0,0,0.4); color: var(--txt); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; font-size: 13.5px; font-family: inherit; }
+  .grp { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--mut); }
+  .hint { color: #6d7380; font-size: 13px; }
+  .infoline { margin-top: 14px; font-size: 14px; color: var(--amb2); min-height: 22px; }
+  .infoline.err { color: #ff9d7a; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 18px; }
+  section.block { padding: 40px 0 10px; }
+  section.block h3 { font-size: clamp(22px, 3vw, 30px); font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; }
+  section.block p.lead { color: var(--mut); max-width: 660px; margin-bottom: 22px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+  .tile h4 { font-size: 16px; margin: 4px 0 6px; }
+  .tile p { color: var(--mut); font-size: 14px; }
+  footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: #6d7380; font-size: 13.5px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="8" height="8" rx="1.5" stroke="#8b5cf6" stroke-width="1.8"/><rect x="13" y="4" width="8" height="8" rx="1.5" stroke="#8b5cf6" stroke-width="1.8"/><rect x="3" y="14" width="8" height="8" rx="1.5" stroke="#8b5cf6" stroke-width="1.8"/><path d="M16.5 17.2l1.5 1.5 3.5-3.8" stroke="#c4b5fd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      Collage-Spalter
+    </div>
+    <a href="#how">So geht's</a>
+    <a href="#faq">FAQ</a>
+    <span class="grp" style="margin-left:auto;color:var(--mut);font-size:13px;">Zusatz-Tool zur VideoSchmiede</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Collage rein.<br /><em>Einzelbilder raus.</em></h1>
+    <p class="sub">Ein Bild mit vielen Panels? Der Spalter zerlegt es in saubere Einzelbilder – mit Original-Aufl&ouml;sung, in Reihenfolge durchnummeriert und direkt als JPG speicherbar. F&uuml;r die VideoSchmiede gedacht, f&uuml;r alles andere auch.</p>
+  </div>
+
+  <div class="studio" id="studio">
+    <div class="card">
+      <h2>1 &middot; Collage laden</h2>
+      <label class="zone" id="zone" for="file">
+        <div class="big">&#129504;</div>
+        <b>Collage hierher ziehen oder antippen</b>
+        <p>JPG/PNG/WEBP &ndash; ein einzelnes Bild mit mehreren Panels (Comic-Collage, Foto-Grid &hellip;)</p>
+      </label>
+      <input type="file" id="file" accept="image/*" style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;" />
+
+      <div class="markwrap" id="markWrap">
+        <h2 style="margin-top:20px;">2 &middot; Raster festlegen</h2>
+        <canvas id="mark"></canvas>
+        <div class="bar">
+          <span class="cnt" id="cnt">0 Panels</span>
+          <span class="grp">Modus:</span>
+          <select id="selMode"><option value="raster" selected>Raster</option><option value="free">Freies Zuschneiden</option></select>
+          <span id="wrapRaster" style="display:inline-flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            <span class="grp">Spalten:</span>
+            <select id="selCols"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>12</option></select>
+            <span class="grp">Reihen:</span>
+            <select id="selRows"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option><option>10</option><option>12</option></select>
+            <span class="grp">Rand je Panel:</span>
+            <select id="selInset"><option value="0">0 %</option><option value="2">2 %</option><option value="3">3 %</option><option value="5" selected>5 %</option><option value="8">8 %</option></select>
+            <span class="grp">Bereich abschneiden &ndash; oben:</span>
+            <select id="selTop"><option value="0" selected>0 %</option><option value="5">5 %</option><option value="8">8 %</option><option value="10">10 %</option><option value="12">12 %</option><option value="15">15 %</option></select>
+            <span class="grp">unten:</span>
+            <select id="selBottom"><option value="0" selected>0 %</option><option value="3">3 %</option><option value="5">5 %</option><option value="8">8 %</option><option value="10">10 %</option><option value="12">12 %</option></select>
+            <span class="grp">links:</span>
+            <select id="selLeft"><option value="0" selected>0 %</option><option value="3">3 %</option><option value="5">5 %</option><option value="8">8 %</option></select>
+            <span class="grp">rechts:</span>
+            <select id="selRight"><option value="0" selected>0 %</option><option value="3">3 %</option><option value="5">5 %</option><option value="8">8 %</option></select>
+            <button class="btn ghost small" id="btnGrid">Raster anwenden</button>
+            <button class="btn ghost small" id="btnAll">Alle aktivieren</button>
+          </span>
+          <span id="wrapFree" style="display:none;flex-wrap:wrap;gap:10px;align-items:center;">
+            <button class="btn ghost small" id="btnUndo">&#8630; Letztes l&ouml;schen</button>
+            <button class="btn ghost small" id="btnClearR">Alle Markierungen l&ouml;schen</button>
+          </span>
+        </div>
+        <p class="hint" style="margin-top:10px;" id="hintRaster">Raster-Modus: Spalten &times; Reihen + R&auml;nder w&auml;hlen, &bdquo;Raster anwenden&ldquo; klicken. &bdquo;Bereich abschneiden&ldquo; entfernt Titel- oder Fu&szlig;zeilen, bevor das Raster gelegt wird. Klick auf ein Panel schaltet es an/aus (dunkel = wird nicht gespeichert).</p>
+        <p class="hint" style="margin-top:10px;display:none;" id="hintFree">Freies Zuschneiden: Mit gedr&uuml;ckter Maustaste (oder Finger) ein Rechteck um jedes Panel aufziehen &ndash; Aufzieh-Reihenfolge = Nummerierung. Klick auf ein markiertes Panel entfernt es. F&uuml;r unregelm&auml;&szlig;ige Comics und Collagen.</p>
+        <div class="row">
+          <button class="btn" id="btnSave">&#128190; Panels als JPG speichern</button>
+          <span class="hint">Der Browser fragt evtl. einmal nach Erlaubnis f&uuml;r mehrere Downloads &ndash; mit OK best&auml;tigen.</span>
+        </div>
+        <div class="infoline" id="infoLine"></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="block" id="how">
+    <h3>So funktioniert's</h3>
+    <p class="lead">Drei Schritte von der Collage zu den Einzelbildern &ndash; alles lokal im Browser.</p>
+    <div class="grid">
+      <div class="tile"><h4>1 &middot; Laden</h4><p>Collage reinziehen oder anklicken. Das Bild bleibt auf deinem Ger&auml;t.</p></div>
+      <div class="tile"><h4>2 &middot; Raster + Rand</h4><p>Spalten &times; Reihen w&auml;hlen (z.&nbsp;B. 6 &times; 4 f&uuml;r 24 Panels), Rand-Anteil in Prozent abschneiden &ndash; wei&szlig;e Stege verschwinden. Einzelne Panels per Klick abw&auml;hlen. Comics mit Titelzeile: &bdquo;Bereich abschneiden &ndash; oben&ldquo; auf ca. 10 %. Unregelm&auml;&szlig;ige Layouts: Modus &bdquo;Freies Zuschneiden&ldquo;.</p></div>
+      <div class="tile"><h4>3 &middot; Speichern</h4><p>Aktive Panels werden je als JPG (92&nbsp;% Qualit&auml;t, Original-Pixelgr&ouml;&szlig;e) gespeichert: name_panel-01.jpg, name_panel-02.jpg &hellip; in Lesereihenfolge.</p></div>
+    </div>
+  </section>
+
+  <section class="block faq" id="faq">
+    <h3>Fragen &amp; Antworten</h3>
+    <div class="tile"><h4>In welcher Reihenfolge werden die Panels gespeichert?</h4><p>Zeile f&uuml;r Zeile, links nach rechts &ndash; passend zur Reihenfolge, in der die VideoSchmiede die Szenen abspielt.</p></div>
+    <div class="tile"><h4>Geht die Aufl&ouml;sung verloren?</h4><p>Nein. Jedes Panel wird in der Original-Pixelgr&ouml;&szlig;e ausgeschnitten (kein Skalieren) und als JPG mit 92&nbsp;% Qualit&auml;t gespeichert.</p></div>
+    <div class="tile"><h4>Mein Comic hat oben eine Titelzeile &ndash; was tun?</h4><p>Im Raster-Modus &bdquo;Bereich abschneiden &ndash; oben&ldquo; auf ca. 10 % stellen und &bdquo;Raster anwenden&ldquo; klicken: Das Raster liegt dann nur unterhalb der Titelzeile. Gleiches funktioniert f&uuml;r Fu&szlig;zeilen (unten) und Seitenr&auml;nder (links/rechts).</p></div>
+    <div class="tile"><h4>Meine Collage ist unregelm&auml;&szlig;ig &ndash; was nun?</h4><p>Modus &bdquo;Freies Zuschneiden&ldquo; w&auml;hlen und jedes Panel mit gedr&uuml;ckter Maustaste als Rechteck aufziehen &ndash; beliebige Gr&ouml;&szlig;en und Positionen, die Aufzieh-Reihenfolge wird zur Nummerierung. F&uuml;r regelm&auml;&szlig;ige Grids bleibt der Raster-Modus.</p></div>
+    <div class="tile"><h4>Und dann in die VideoSchmiede?</h4><p>Die gespeicherten Einzelbilder einfach in die VideoSchmiede ziehen (oder auf GitHub &ouml;ffnen): jedes Bild wird eine Filmszene, Musik dazu, Video bauen &ndash; fertig.</p></div>
+  </section>
+
+  <footer>
+    Collage-Spalter &mdash; Zusatz-Tool zur VideoSchmiede. L&auml;uft komplett lokal: kein Server, kein Upload, kein Konto.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var zone = $("zone"), fileIn = $("file"), markWrap = $("markWrap");
+  var mark = $("mark"), mctx = mark.getContext("2d");
+  var selCols = $("selCols"), selRows = $("selRows"), selInset = $("selInset");
+  var selMode = $("selMode"), selTop = $("selTop"), selBottom = $("selBottom"), selLeft = $("selLeft"), selRight = $("selRight");
+  var wrapRaster = $("wrapRaster"), wrapFree = $("wrapFree"), hintRaster = $("hintRaster"), hintFree = $("hintFree");
+  var btnUndo = $("btnUndo"), btnClearR = $("btnClearR");
+  var btnGrid = $("btnGrid"), btnAll = $("btnAll"), btnSave = $("btnSave");
+  var cnt = $("cnt"), infoLine = $("infoLine");
+
+  var ST = {
+    img: null, url: null, name: "",
+    c: 6, r: 4, ins: 0.05,
+    on: [],
+    mode: "raster", rects: [], bT: 0, bB: 0, bL: 0, bR: 0
+  };
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function baseName() { return (ST.name || "collage").replace(/\.[^.]+$/, "") || "collage"; }
+
+  // Raster-Bereich nach Abzug der Bereich-Raender (oben/unten/links/rechts)
+  function region() {
+    var bT = clamp(ST.bT, 0, 0.4), bB = clamp(ST.bB, 0, 0.4);
+    var bL = clamp(ST.bL, 0, 0.4), bR = clamp(ST.bR, 0, 0.4);
+    return {
+      x: bL,
+      y: bT,
+      w: Math.max(0.1, 1 - bL - bR),
+      h: Math.max(0.1, 1 - bT - bB)
+    };
+  }
+  // Zelle i (row-major) innerhalb des Bereichs, je Zelle Rand-Anteil
+  function cellRect(i) {
+    var rg = region();
+    var cx = i % ST.c, cy = Math.floor(i / ST.c);
+    return {
+      x: rg.x + (cx + ST.ins) * rg.w / ST.c,
+      y: rg.y + (cy + ST.ins) * rg.h / ST.r,
+      w: (1 - 2 * ST.ins) * rg.w / ST.c,
+      h: (1 - 2 * ST.ins) * rg.h / ST.r
+    };
+  }
+  function activeList() {
+    var out = [];
+    for (var i = 0; i < ST.on.length; i++) if (ST.on[i]) out.push(i);
+    return out;
+  }
+  function panelSize() {
+    if (!ST.img) return { w: 0, h: 0 };
+    var rg = region();
+    return {
+      w: Math.max(1, Math.round((1 - 2 * ST.ins) * rg.w / ST.c * ST.img.naturalWidth)),
+      h: Math.max(1, Math.round((1 - 2 * ST.ins) * rg.h / ST.r * ST.img.naturalHeight))
+    };
+  }
+  function updateCount() {
+    if (ST.mode === "free") { updateFreeInfo(); return; }
+    var n = ST.on.length, a = activeList().length, ps = panelSize();
+    cnt.textContent = a + " von " + n + " Panels";
+    if (ST.img && a) {
+      infoLine.textContent = a + " Panels aktiv \u00b7 je " + ps.w + "\u00d7" + ps.h + " px \u00b7 Benennung: " + baseName() + "_panel-01\u2026" + pad(a) + ".jpg";
+      infoLine.className = "infoline";
+    } else if (ST.img) {
+      infoLine.textContent = "Kein Panel aktiv \u2013 mindestens eines anklicken.";
+      infoLine.className = "infoline err";
+    } else {
+      infoLine.textContent = "";
+    }
+  }
+
+  function draw() {
+    if (!ST.img) return;
+    var w = Math.min(880, ST.img.naturalWidth);
+    mark.width = w;
+    mark.height = Math.round(w * ST.img.naturalHeight / ST.img.naturalWidth);
+    mctx.clearRect(0, 0, mark.width, mark.height);
+    mctx.drawImage(ST.img, 0, 0, mark.width, mark.height);
+    if (ST.mode === "free") { drawFree(); return; }
+    var rg = region();
+    mctx.fillStyle = "rgba(0,0,0,0.55)";
+    if (rg.x > 0) mctx.fillRect(0, 0, rg.x * mark.width, mark.height);
+    if (rg.y > 0) mctx.fillRect(0, 0, mark.width, rg.y * mark.height);
+    if (rg.x + rg.w < 1) mctx.fillRect((rg.x + rg.w) * mark.width, 0, (1 - rg.x - rg.w) * mark.width + 1, mark.height);
+    if (rg.y + rg.h < 1) mctx.fillRect(0, (rg.y + rg.h) * mark.height, mark.width, (1 - rg.y - rg.h) * mark.height + 1);
+    var num = 0;
+    for (var i = 0; i < ST.on.length; i++) {
+      var rc = cellRect(i);
+      var x = rc.x * mark.width, y = rc.y * mark.height;
+      var cw = rc.w * mark.width, ch = rc.h * mark.height;
+      if (!ST.on[i]) {
+        mctx.fillStyle = "rgba(0,0,0,0.55)";
+        mctx.fillRect(x, y, cw, ch);
+        mctx.strokeStyle = "rgba(255,255,255,0.25)";
+        mctx.lineWidth = 1.5;
+        mctx.setLineDash([5, 4]);
+        mctx.strokeRect(x, y, cw, ch);
+        mctx.setLineDash([]);
+      } else {
+        num++;
+        mctx.fillStyle = "rgba(139,92,246,0.13)";
+        mctx.fillRect(x, y, cw, ch);
+        mctx.strokeStyle = "rgba(196,181,253,0.95)";
+        mctx.lineWidth = 2;
+        mctx.strokeRect(x, y, cw, ch);
+        mctx.fillStyle = "#c4b5fd";
+        mctx.font = "bold 14px Inter, system-ui, sans-serif";
+        mctx.fillText(String(num), x + 6, y + 19);
+      }
+    }
+  }
+
+  function applyGrid() {
+    ST.c = Math.max(1, Number(selCols.value) || 6);
+    ST.r = Math.max(1, Number(selRows.value) || 4);
+    ST.ins = clamp((Number(selInset.value) || 0) / 100, 0, 0.45);
+    ST.bT = clamp((Number(selTop.value) || 0) / 100, 0, 0.4);
+    ST.bB = clamp((Number(selBottom.value) || 0) / 100, 0, 0.4);
+    ST.bL = clamp((Number(selLeft.value) || 0) / 100, 0, 0.4);
+    ST.bR = clamp((Number(selRight.value) || 0) / 100, 0, 0.4);
+    ST.on = [];
+    for (var i = 0; i < ST.c * ST.r; i++) ST.on.push(true);
+    draw();
+    updateCount();
+  }
+
+  function setImg(file) {
+    if (!file) return;
+    var isImg = (file.type && file.type.indexOf("image/") === 0) ||
+      ".jpg.jpeg.png.webp.gif.bmp.avif.jfif.".indexOf((file.name.split(".").pop() || "").toLowerCase() + ".") >= 0;
+    if (!isImg) {
+      infoLine.textContent = "Keine Bilddatei \u2013 JPG, PNG oder WEBP nehmen.";
+      infoLine.className = "infoline err";
+      return;
+    }
+    if (!file.size) {
+      infoLine.textContent = "\u201E" + (file.name || "Datei") + "\u201C ist leer (0 Bytes) \u2013 oft bei Direkt-Ziehen aus Messenger-Apps. Erst speichern, dann per Klick ausw\u00e4hlen.";
+      infoLine.className = "infoline err";
+      return;
+    }
+    if (ST.url) URL.revokeObjectURL(ST.url);
+    ST.rects = [];
+    ST.url = URL.createObjectURL(file);
+    ST.name = file.name;
+    var img = new Image();
+    img.onload = function () {
+      ST.img = img;
+      markWrap.classList.add("on");
+      applyGrid();
+    };
+    img.onerror = function () {
+      infoLine.textContent = "\u201E" + (file.name || "Datei") + "\u201C konnte nicht geladen werden \u2013 Format unterst\u00fctzt?";
+      infoLine.className = "infoline err";
+    };
+    img.src = ST.url;
+  }
+
+  // Panel-Klick: Zelle umschalten
+  mark.addEventListener("click", function (e) {
+    if (!ST.img || ST.mode !== "raster") return;
+    var b = mark.getBoundingClientRect();
+    var mx = clamp((e.clientX - b.left) / b.width, 0, 0.999);
+    var my = clamp((e.clientY - b.top) / b.height, 0, 0.999);
+    var cx = Math.floor(mx * ST.c), cy = Math.floor(my * ST.r);
+    var i = cy * ST.c + cx;
+    if (i >= 0 && i < ST.on.length) ST.on[i] = !ST.on[i];
+    draw();
+    updateCount();
+  });
+
+  // Speichern: aktive Panels als JPG
+  function cropRect(rc, cb) {
+    var iw = ST.img.naturalWidth, ih = ST.img.naturalHeight;
+    var cw = Math.max(1, Math.round(rc.w * iw)), ch = Math.max(1, Math.round(rc.h * ih));
+    var off = document.createElement("canvas");
+    off.width = cw; off.height = ch;
+    var c = off.getContext("2d");
+    c.fillStyle = "#ffffff";
+    c.fillRect(0, 0, cw, ch);
+    c.drawImage(ST.img, Math.round(rc.x * iw), Math.round(rc.y * ih), cw, ch, 0, 0, cw, ch);
+    off.toBlob(cb, "image/jpeg", 0.92);
+  }
+  function saveAll() {
+    var act = rectsForSave();
+    if (!ST.img || !act.length) { updateCount(); return; }
+    var base = baseName();
+    var k = 0;
+    infoLine.textContent = "Speichere Panel 1 von " + act.length + " \u2026";
+    infoLine.className = "infoline";
+    function next() {
+      if (k >= act.length) {
+        infoLine.textContent = "\u2713 " + act.length + " Panels gespeichert \u2013 jetzt in die VideoSchmiede ziehen!";
+        infoLine.className = "infoline";
+        return;
+      }
+      infoLine.textContent = "Speichere Panel " + (k + 1) + " von " + act.length + " \u2026";
+      cropRect(act[k], function (blob) {
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = base + "_panel-" + pad(k + 1) + ".jpg";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+        k++;
+        setTimeout(next, 350);
+      });
+    }
+    next();
+  }
+
+  // ---------- Freies Zuschneiden (unregelmaessige Layouts) ----------
+  function rectFromDrag(x0, y0, x1, y1) {
+    var x = Math.min(x0, x1), y = Math.min(y0, y1);
+    return { x: x, y: y, w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+  }
+  function hitRect(px, py) {
+    for (var i = ST.rects.length - 1; i >= 0; i--) {
+      var r = ST.rects[i];
+      if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i;
+    }
+    return -1;
+  }
+  function rectsForSave() {
+    if (ST.mode === "free") return ST.rects.slice();
+    var out = [];
+    for (var i = 0; i < ST.on.length; i++) if (ST.on[i]) out.push(cellRect(i));
+    return out;
+  }
+  function updateFreeInfo() {
+    var a = ST.rects.length;
+    cnt.textContent = a + " Panels markiert";
+    if (ST.img && a) {
+      infoLine.textContent = a + " Panels · Benennung: " + baseName() + "_panel-01…" + pad(a) + ".jpg";
+      infoLine.className = "infoline";
+    } else if (ST.img) {
+      infoLine.textContent = "Noch keine Panels markiert – mit gedrückter Maustaste Rechtecke aufziehen.";
+      infoLine.className = "infoline err";
+    } else {
+      infoLine.textContent = "";
+    }
+  }
+  function drawFree() {
+    for (var i = 0; i < ST.rects.length; i++) {
+      var r = ST.rects[i];
+      var x = r.x * mark.width, y = r.y * mark.height;
+      var cw = r.w * mark.width, ch = r.h * mark.height;
+      mctx.fillStyle = "rgba(139,92,246,0.13)";
+      mctx.fillRect(x, y, cw, ch);
+      mctx.strokeStyle = "rgba(196,181,253,0.95)";
+      mctx.lineWidth = 2;
+      mctx.setLineDash([]);
+      mctx.strokeRect(x, y, cw, ch);
+      mctx.fillStyle = "rgba(139,92,246,0.9)";
+      mctx.fillRect(x, y + ch - 18, 30, 18);
+      mctx.fillStyle = "#fff";
+      mctx.font = "bold 12px sans-serif";
+      mctx.fillText(String(i + 1), x + 5, y + ch - 5);
+    }
+    if (dragR && dragR.hasCurrent) {
+      var q = rectFromDrag(dragR.x0, dragR.y0, dragR.x1, dragR.y1);
+      mctx.strokeStyle = "#c4b5fd";
+      mctx.lineWidth = 2;
+      mctx.setLineDash([6, 4]);
+      mctx.strokeRect(q.x * mark.width, q.y * mark.height, q.w * mark.width, q.h * mark.height);
+      mctx.setLineDash([]);
+    }
+  }
+  var dragR = null;
+  function normPos(e) {
+    var b = mark.getBoundingClientRect();
+    return {
+      x: clamp((e.clientX - b.left) / b.width, 0, 1),
+      y: clamp((e.clientY - b.top) / b.height, 0, 1)
+    };
+  }
+  mark.addEventListener("pointerdown", function (e) {
+    if (!ST.img || ST.mode !== "free") return;
+    var p = normPos(e);
+    dragR = { x0: p.x, y0: p.y, x1: p.x, y1: p.y, hasCurrent: false };
+    try { mark.setPointerCapture(e.pointerId); } catch (err) { }
+  });
+  mark.addEventListener("pointermove", function (e) {
+    if (!dragR) return;
+    var p = normPos(e);
+    dragR.x1 = p.x; dragR.y1 = p.y;
+    dragR.hasCurrent = true;
+    draw();
+  });
+  mark.addEventListener("pointerup", function (e) {
+    if (!dragR) return;
+    var p = normPos(e);
+    var r = rectFromDrag(dragR.x0, dragR.y0, p.x, p.y);
+    var bb = mark.getBoundingClientRect();
+    var dispW = Math.abs(p.x - dragR.x0) * bb.width;
+    var dispH = Math.abs(p.y - dragR.y0) * bb.height;
+    dragR = null;
+    if (dispW < 8 && dispH < 8) {
+      var hi = hitRect(p.x, p.y);
+      if (hi >= 0) ST.rects.splice(hi, 1);
+    } else if (ST.img.naturalWidth * r.w >= 12 && ST.img.naturalHeight * r.h >= 12) {
+      ST.rects.push(r);
+    }
+    draw();
+    updateCount();
+  });
+  mark.addEventListener("pointercancel", function () { if (dragR) { dragR = null; draw(); } });
+  function applyModeUI() {
+    var isFree = selMode.value === "free";
+    ST.mode = isFree ? "free" : "raster";
+    wrapRaster.style.display = isFree ? "none" : "inline-flex";
+    wrapFree.style.display = isFree ? "inline-flex" : "none";
+    hintRaster.style.display = isFree ? "none" : "";
+    hintFree.style.display = isFree ? "" : "none";
+    dragR = null;
+    draw();
+    updateCount();
+  }
+  selMode.addEventListener("change", applyModeUI);
+  btnUndo.addEventListener("click", function () { ST.rects.pop(); draw(); updateCount(); });
+  btnClearR.addEventListener("click", function () { ST.rects = []; draw(); updateCount(); });
+
+  // Verkabelung
+  // Upload: Zone ist ein <label for="file"> – Tap/Klick öffnet den Dialog nativ (auch mobil)
+  fileIn.addEventListener("change", function () {
+    if (fileIn.files && fileIn.files.length) { setImg(fileIn.files[0]); fileIn.value = ""; }
+  });
+  zone.addEventListener("dragover", function (e) { e.preventDefault(); zone.classList.add("drag"); });
+  zone.addEventListener("dragleave", function () { zone.classList.remove("drag"); });
+  zone.addEventListener("drop", function (e) {
+    e.preventDefault();
+    zone.classList.remove("drag");
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) setImg(f);
+  });
+  document.addEventListener("dragover", function (e) { e.preventDefault(); });
+  document.addEventListener("drop", function (e) { e.preventDefault(); });
+  btnGrid.addEventListener("click", applyGrid);
+  btnAll.addEventListener("click", function () {
+    for (var i = 0; i < ST.on.length; i++) ST.on[i] = true;
+    draw();
+    updateCount();
+  });
+  btnSave.addEventListener("click", saveAll);
+  updateCount();
+})();
+</script>
+</body>
+</html>
