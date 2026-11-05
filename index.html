@@ -202,6 +202,9 @@
         <label><input type="checkbox" id="fxShimmer" checked /> Kamera-Zittern</label>
         <label><input type="checkbox" id="fxLife" checked /> Atmen &amp; Beat-Puls</label>
         <label><input type="checkbox" id="fxLook" checked /> Vignette &amp; Filmkorn</label>
+        <label><input type="checkbox" id="fxKino" checked /> Kino-Kamera (KlingAI-Look)</label>
+        <label><input type="checkbox" id="fxTrans" checked /> Filmische Übergänge</label>
+        <label><input type="checkbox" id="fxLetter" checked /> Letterbox + Flares</label>
         <label><input type="checkbox" id="fxPop" checked /> Panel-Pop (Comic)</label>
         <label><input type="checkbox" id="fxBoil" checked /> Figuren-Boil (Wackel-Comic)</label>
         <span class="grp">Bild-Takt:
@@ -314,6 +317,34 @@
     var span = DYN[dyn] || 0.10;
     var zin = i % 2 === 0;
     return { z0: zin ? 1.0 : 1.0 + span, z1: zin ? 1.0 + span : 1.0, dir: i % 4 < 2 ? 1 : -1 };
+  }
+  // === Kino-Regie (KlingAI-Look): pro Szene ein Kamera-Shot + Transition ===
+  // move: 0 push-in, 1 pull-out, 2 dolly-links, 3 dolly-rechts, 4 crane-hoch, 5 crane-runter, 6 orbit
+  function kinoShot(i, dyn, seedStr) {
+    var rng = mulberry32(hashSeed((seedStr || "kino") + "|" + i));
+    var span = DYN[dyn] || 0.10;
+    var move = Math.floor(rng() * 7);
+    var dir = rng() > 0.5 ? 1 : -1;
+    var boost = 0.85 + rng() * 0.7;
+    var rot = (rng() - 0.5) * (move === 6 ? 0.05 : 0.022);
+    var panX = (rng() - 0.5) * 2;
+    var panY = (rng() - 0.5) * 2;
+    // Push/Pull bekommen etwas mehr Zoom für echtes Dolly-Gefühl
+    if (move <= 1) span *= 1.35 * boost;
+    else span *= boost;
+    var zin = (move === 0) || (move !== 1 && i % 2 === 0);
+    return { move: move, dir: dir, rot: rot, panX: panX, panY: panY,
+      z0: zin ? 1.0 : 1.0 + span, z1: zin ? 1.0 + span : 1.0 };
+  }
+  function kinoPlan(n, dyn, seedStr) {
+    var plan = [], trans = [], rngT = mulberry32(hashSeed((seedStr || "kino") + "|trans"));
+    for (var i = 0; i < n; i++) {
+      plan.push(kinoShot(i, dyn, seedStr));
+      // 0 dissolve, 1 dip-black, 2 punch-zoom, 3 whip-pan – gewichtet: meist weich, manchmal punchy
+      var rt = rngT();
+      trans.push(rt < 0.45 ? 0 : rt < 0.65 ? 1 : rt < 0.85 ? 2 : 3);
+    }
+    return { cam: plan, trans: trans };
   }
   function kenBurns(rect, imgW, imgH, p, cam, viewA) {
     var rx = rect.x * imgW, ry = rect.y * imgH, rw = rect.w * imgW, rh = rect.h * imgH;
@@ -489,6 +520,7 @@
   var audioInfo = $("audioInfo"), au = $("au");
   var selDyn = $("selDyn"), fxShimmer = $("fxShimmer"), fxLife = $("fxLife"), fxLook = $("fxLook");
   var fxPop = $("fxPop"), fxBoil = $("fxBoil"), selFrameRate = $("selFrameRate");
+  var fxKino = $("fxKino"), fxTrans = $("fxTrans"), fxLetter = $("fxLetter");
   var btnBuild = $("btnBuild"), infoLine = $("infoLine");
   var preview = $("preview"), stage = $("stage"), ctx2 = stage.getContext("2d");
   var btnPlay = $("btnPlay"), btnRestart = $("btnRestart"), seek = $("seek"), tLab = $("tLab"), secLab = $("secLab");
@@ -671,6 +703,10 @@
     ensureGraph();
     ST.sources = buildSources();
     ST.TL = makeTL(ST.audioDur, n);
+    try {
+      var kp = kinoPlan(ST.TL.n, Number(selDyn.value), ST.audioName || ("song" + ST.audioDur));
+      ST.camPlan = kp.cam; ST.transPlan = kp.trans;
+    } catch (e) { ST.camPlan = null; ST.transPlan = null; }
     preview.classList.add("on");
     au.currentTime = 0;
     play();
@@ -1114,7 +1150,7 @@
   // ---------- Rendering ----------
   function drawLayer(ly, t) {
     var tl = ST.TL;
-    var img, rect, cam, p;
+    var img, rect, cam, p, kino = null;
     var span = DYN[selDyn.value] || 0.10;
     if (ly.k === "intro") {
       var s0 = ST.sources[0];
@@ -1134,13 +1170,44 @@
         // Daumenkino: feste, zentrierte Fenstereinstellung – die Bildfolge selbst ist die Bewegung
         cam = { z0: 1, z1: 1, dir: 1 };
         p = 0.5;
+      } else if (fxKino && fxKino.checked && ST.camPlan && ST.camPlan[ly.i % ST.camPlan.length]) {
+        kino = ST.camPlan[ly.i % ST.camPlan.length];
+        cam = kino;
+        p = clamp((t - (tl.INTRO + ly.i * tl.shotDur)) / tl.shotDur, 0, 1);
       } else {
         cam = shotCam(ly.i, Number(selDyn.value));
         p = clamp((t - (tl.INTRO + ly.i * tl.shotDur)) / tl.shotDur, 0, 1);
       }
     }
     var kb = kenBurns(rect, img.naturalWidth, img.naturalHeight, p, cam, 16 / 9);
+    // Kino-Look: laterale/vertikale Drift + leichter Orbit-Roll + Parallax-Tiefe
+    var rotK = 0, driftX = 0, driftY = 0;
+    if (kino) {
+      var e = easeIO(p);
+      if (kino.move === 2) driftX = (e - 0.5) * 2 * kino.dir * kb.sw * 0.06;
+      if (kino.move === 3) driftX = (0.5 - e) * 2 * kino.dir * kb.sw * 0.06;
+      if (kino.move === 4) driftY = (0.5 - e) * 2 * kb.sh * 0.08;
+      if (kino.move === 5) driftY = (e - 0.5) * 2 * kb.sh * 0.08;
+      if (kino.move === 6) rotK = kino.rot * (e - 0.5) * 2;
+      else if (kino.rot) rotK = kino.rot * 0.35 * (e - 0.5) * 2;
+      driftX += (kino.panX || 0) * e * kb.sw * 0.008;
+      driftY += (kino.panY || 0) * e * kb.sh * 0.008;
+    }
+    var sx = kb.sx + driftX, sy = kb.sy + driftY;
+    sx = clamp(sx, 0, Math.max(0, img.naturalWidth - kb.sw));
+    sy = clamp(sy, 0, Math.max(0, img.naturalHeight - kb.sh));
     ctx2.globalAlpha = ly.a;
+    if (kino && (Math.abs(rotK) > 0.0004)) {
+      // Overscan-Draw damit Rotation keine Ecken zeigt + Parallax: dunkler, leicht größerer Back-Layer
+      try { ctx2.save(); ctx2.globalAlpha = ly.a * 0.9; ctx2.filter = "blur(7px) brightness(0.55) saturate(1.1)"; ctx2.drawImage(img, sx, sy, kb.sw, kb.sh, -46, -26, 1372, 772); ctx2.restore(); } catch (err) {}
+      ctx2.globalAlpha = ly.a;
+      ctx2.save();
+      ctx2.translate(640, 360); ctx2.rotate(rotK); ctx2.translate(-640, -360);
+      ctx2.drawImage(img, sx, sy, kb.sw, kb.sh, -40, -22, 1360, 765);
+      ctx2.restore();
+      ctx2.globalAlpha = 1;
+      return;
+    }
     if (fxBoil.checked) {
       // Figuren-Boil: Bild in 8 Streifen zerlegen, Streifen im 120-ms-Takt einzeln verschieben (Line-Boil wie in Indie-Serien)
       var tickB = Math.floor(au.currentTime * 1000 / 120);
@@ -1148,10 +1215,10 @@
       var NB = 8, stepY = kb.sh / NB, dstY = 720 / NB;
       for (var rB = 0; rB < NB; rB++) {
         var oxB = (rngB() - 0.5) * 4.4;
-        ctx2.drawImage(img, kb.sx, kb.sy + rB * stepY, kb.sw, stepY + 1, oxB - 3, rB * dstY - 1, 1286, dstY + 2);
+        ctx2.drawImage(img, sx, sy + rB * stepY, kb.sw, stepY + 1, oxB - 3, rB * dstY - 1, 1286, dstY + 2);
       }
     } else {
-      ctx2.drawImage(img, kb.sx, kb.sy, kb.sw, kb.sh, 0, 0, 1280, 720);
+      ctx2.drawImage(img, sx, sy, kb.sw, kb.sh, 0, 0, 1280, 720);
     }
     ctx2.globalAlpha = 1;
   }
@@ -1169,7 +1236,22 @@
     var useLife = fxLife.checked;
     var useShim = fxShimmer.checked;
     var useLook = fxLook.checked;
+    var useKino = (typeof fxKino !== "undefined" && fxKino && fxKino.checked);
+    var useTrans = (typeof fxTrans !== "undefined" && fxTrans && fxTrans.checked);
     var s = 1, rot = 0, ox = 0, oy = 0;
+    // Filmischer Übergang: Typ + Fortschritt aus dem Schnitt-Index bestimmen (KlingAI-Style: zusammenfügen ohne harte Cuts)
+    var transType = 0, transQ = -1, transIdx = 0;
+    if (useTrans && tl.XF > 0 && t >= tl.INTRO && t < tl.D - tl.OUTRO && layers.length === 2) {
+      var cutU = t - tl.INTRO;
+      var cutI = Math.min(tl.n - 1, Math.floor(cutU / tl.shotDur));
+      var cutT0 = tl.INTRO + cutI * tl.shotDur;
+      if (cutI > 0 && t - cutT0 < tl.XF) {
+        transQ = clamp((t - cutT0) / tl.XF, 0, 1);
+        transIdx = cutI;
+        transType = (ST.transPlan && ST.transPlan[cutI % ST.transPlan.length] != null) ? ST.transPlan[cutI % ST.transPlan.length] : 0;
+        if (!useKino) transType = 0;
+      }
+    }
     if (useLife) {
       s *= 1 + 0.0045 * Math.sin(2 * Math.PI * t / 3.7);
       rot += 0.0021 * Math.sin(2 * Math.PI * t / 5.3);
@@ -1204,6 +1286,11 @@
         rot += 0.011 * pv * ((Math.floor((t - tl.INTRO) / tl.shotDur) % 2) ? -1 : 1);
       }
     }
+    // Punch-Zoom + Whip-Pan leben auf dem Global-Transform (fügen sich nahtlos zusammen)
+    if (transQ >= 0) {
+      if (transType === 2) s *= 1 + 0.07 * Math.sin(Math.PI * transQ);
+      if (transType === 3) { ox += (0.5 - transQ) * 130; rot += (0.5 - transQ) * 0.012; s *= 1 + 0.03 * Math.sin(Math.PI * transQ); }
+    }
     ctx2.save();
     ctx2.translate(W / 2 + ox, H / 2 + oy);
     ctx2.scale(s, s);
@@ -1211,6 +1298,46 @@
     ctx2.translate(-W / 2, -H / 2);
     for (var i = 0; i < layers.length; i++) drawLayer(layers[i], t);
     ctx2.restore();
+    if (transQ >= 0 && transType === 1) {
+      // Dip-to-Black: weiches Abblenden in der Schnittmitte – verknüpft beide Shots wie im Kinofilm
+      ctx2.save();
+      ctx2.globalAlpha = 0.85 * Math.sin(Math.PI * transQ);
+      ctx2.fillStyle = "#000";
+      ctx2.fillRect(0, 0, W, H);
+      ctx2.restore();
+    }
+    if (transQ >= 0 && transType === 3) {
+      // Whip-Streaks: helle horizontale Lichtstreifen während des Wischers
+      ctx2.save();
+      ctx2.globalAlpha = 0.16 * Math.sin(Math.PI * transQ);
+      ctx2.fillStyle = "#cfe6ff";
+      for (var st = 0; st < 3; st++) {
+        var wy = 180 + st * 170 + (transQ - 0.5) * 60;
+        ctx2.fillRect(0, wy, W, 3 + st * 2);
+      }
+      ctx2.restore();
+    }
+    if (typeof fxLetter !== "undefined" && fxLetter && fxLetter.checked) {
+      // Letterbox 2.35:1 + wandernder Anamorph-Flare – sofort Kinofilm-Anmutung, Bilder werden zusammengeführt
+      var barH = Math.round((H - W / 2.35) / 2);
+      ctx2.save();
+      ctx2.fillStyle = "#000";
+      ctx2.fillRect(0, 0, W, barH);
+      ctx2.fillRect(0, H - barH, W, barH);
+      var cyc = 9, ph = (t % cyc) / cyc;
+      var fx2 = ph * (W + 400) - 200;
+      var grd = ctx2.createLinearGradient(fx2 - 220, 0, fx2 + 220, 0);
+      grd.addColorStop(0, "rgba(120,180,255,0)");
+      grd.addColorStop(0.5, "rgba(140,190,255,0.13)");
+      grd.addColorStop(1, "rgba(120,180,255,0)");
+      ctx2.globalAlpha = 1;
+      ctx2.fillStyle = grd;
+      ctx2.fillRect(0, barH, W, H - 2 * barH);
+      ctx2.globalAlpha = 0.5;
+      ctx2.fillStyle = "rgba(170,210,255,0.55)";
+      ctx2.fillRect(fx2 - 60, H / 2 - 1, 120, 2);
+      ctx2.restore();
+    }
     if (useLook) {
       if (!ST.vig) ST.vig = makeVig();
       if (!ST.grainA) { ST.grainA = makeGrain(); ST.grainB = makeGrain(); }
