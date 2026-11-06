@@ -61,6 +61,7 @@
   .thumb { position: relative; width: 86px; height: 62px; border-radius: 8px; overflow: hidden;
     border: 1px solid var(--line); background: #000; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb button { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
     border: none; background: rgba(0,0,0,0.7); color: #ff9d7a; font-size: 12px; cursor: pointer; line-height: 1; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
@@ -109,7 +110,7 @@
 </style>
 </head>
 <body>
-<!-- Videoversuche v2.5 – MuseGen-Vorlage, verbessert: Foto-Serie + Visual-Stile + Comic-Animation (Panel-Pop, Figuren-Boil, Daumenkino) -->
+<!-- Videoversuche v2.6 (Videoclip-Szenen) – MuseGen-Vorlage, verbessert: Foto-Serie + Visual-Stile + Comic-Animation (Panel-Pop, Figuren-Boil, Daumenkino) -->
 <header>
   <div class="wrap nav">
     <div class="logo">
@@ -140,7 +141,7 @@
     <h3>So entsteht dein Musikvideo</h3>
     <p class="lead">Drei Schritte, keine Vorkenntnisse n&ouml;tig &ndash; vom Material zum fertigen Clip in Minuten.</p>
     <div class="grid">
-      <div class="tile"><div class="num">01</div><h4>Material w&auml;hlen</h4><p>Einzelbilder (JPG/PNG/WEBP) reinziehen &ndash; jedes wird eine Filmszene. Collagen? Daf&uuml;r gibt es ein eigenes Zusatz-Tool, das sie automatisch in Einzelbilder zerlegt. Oder einfach den Visual-Stil-Modus w&auml;hlen &ndash; dann zeichnet das Video komplett aus der Musik.</p></div>
+      <div class="tile"><div class="num">01</div><h4>Material w&auml;hlen</h4><p>Einzelbilder (JPG/PNG/WEBP) oder Videoclips (MP4/WebM) reinziehen &ndash; jedes wird eine Filmszene. Collagen? Daf&uuml;r gibt es ein eigenes Zusatz-Tool, das sie automatisch in Einzelbilder zerlegt. Oder einfach den Visual-Stil-Modus w&auml;hlen &ndash; dann zeichnet das Video komplett aus der Musik.</p></div>
       <div class="tile"><div class="num">02</div><h4>Musik dazu</h4><p>MP3, WAV, OGG oder M4A reinziehen. Die Songl&auml;nge bestimmt die Timeline, der Beat steuert Puls und Atmung des Videos. Leere Dateien (z.&nbsp;B. direkt aus Messenger-Apps gezogen) werden sauber erkannt und gemeldet.</p></div>
       <div class="tile"><div class="num">03</div><h4>Bauen &amp; exportieren</h4><p>Ein Klick baut die Timeline und startet die Vorschau. Der Export spielt das Video einmal komplett durch und zeichnet es mit Ton als WebM auf &ndash; fertig zum Hochladen.</p></div>
     </div>
@@ -170,10 +171,10 @@
       <div class="pane on" id="panePhotos">
         <label class="zone" id="zonePhotos" for="filePhotos">
           <div class="big">&#128247;</div>
-          <b>Bilder hierher ziehen oder antippen</b>
-          <p>Mehrere Fotos (JPG/PNG/WEBP) &ndash; jedes wird eine Filmszene. Reihenfolge = Reihenfolge im Video.</p>
+          <b>Bilder oder Videoclips hierher ziehen oder antippen</b>
+          <p>Fotos (JPG/PNG/WEBP) und Clips (MP4/WebM) &ndash; jedes wird eine Filmszene. Reihenfolge = Reihenfolge im Video.</p>
         </label>
-        <input type="file" id="filePhotos" accept="image/*" multiple style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;" />
+        <input type="file" id="filePhotos" accept="image/*,video/mp4,video/webm" multiple style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;" />
         <div class="row" style="margin-top:12px;">
           <button class="btn ghost small" id="btnShuffle" disabled>&#128256; Reihenfolge mischen</button>
           <button class="btn ghost small" id="btnClearPhotos" disabled>Leeren</button>
@@ -550,11 +551,13 @@
   function kindOf(f) {
     var t = f && f.type ? f.type : "";
     if (t.indexOf("image/") === 0) return "img";
+    if (t.indexOf("video/") === 0) return "vid";
     if (t.indexOf("audio/") === 0) return "aud";
     var n = ((f && f.name) || "").toLowerCase(), d = n.lastIndexOf(".");
     var ext = d < 0 ? "" : n.slice(d);
     if (".jpg.jpeg.png.webp.gif.bmp.avif.jfif.".indexOf(ext + ".") >= 0) return "img";
     if (".mp3.wav.ogg.oga.m4a.aac.flac.opus.".indexOf(ext + ".") >= 0) return "aud";
+    if (".mp4.webm.mov.mkv.m4v.".indexOf(ext + ".") >= 0) return "vid";
     return "";
   }
   document.addEventListener("dragover", function (e) { e.preventDefault(); });
@@ -568,14 +571,28 @@
   function addPhotos(files) {
     var added = 0;
     for (var i = 0; i < files.length; i++) {
-      if (kindOf(files[i]) !== "img") continue;
-      (function (f) {
+      var kd = kindOf(files[i]);
+      if (kd !== "img" && kd !== "vid") continue;
+      (function (f, kind) {
         var url = URL.createObjectURL(f);
-        var img = new Image();
-        img.onload = function () { ST.photos.push({ url: url, img: img, name: f.name }); renderThumbs(); updateInfo(); };
-        img.onerror = function () { URL.revokeObjectURL(url); fileError("Bild", f.name); };
-        img.src = url;
-      })(files[i]);
+        if (kind === "vid") {
+          // Videoclip als Szene: stummgeschaltetes <video> als Quelle, Canvas zeichnet Frames
+          var v = document.createElement("video");
+          v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+          v.addEventListener("error", function () { URL.revokeObjectURL(url); fileError("Videoclip", f.name); });
+          v.addEventListener("loadeddata", function () {
+            if (!v.videoWidth) { URL.revokeObjectURL(url); fileError("Videoclip", f.name); return; }
+            ST.photos.push({ url: url, img: v, name: f.name, isVid: true, dur: (isFinite(v.duration) && v.duration > 0) ? v.duration : 0 });
+            renderThumbs(); updateInfo();
+          });
+          try { v.load(); } catch (err) {}
+        } else {
+          var img = new Image();
+          img.onload = function () { ST.photos.push({ url: url, img: img, name: f.name }); renderThumbs(); updateInfo(); };
+          img.onerror = function () { URL.revokeObjectURL(url); fileError("Bild", f.name); };
+          img.src = url;
+        }
+      })(files[i], kd);
       added++;
     }
     if (added) stopEverything();
@@ -589,8 +606,18 @@
     ST.photos.forEach(function (p, idx) {
       var d = document.createElement("div");
       d.className = "thumb";
-      var im = document.createElement("img");
-      im.src = p.url;
+      var im;
+      if (p.isVid) {
+        im = document.createElement("video");
+        im.src = p.url; im.muted = true; im.playsInline = true; im.preload = "metadata";
+        var badge = document.createElement("span");
+        badge.textContent = "CLIP";
+        badge.style.cssText = "position:absolute;left:3px;bottom:3px;background:rgba(139,92,246,0.85);color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;letter-spacing:0.06em;z-index:2;";
+        d.appendChild(badge);
+      } else {
+        im = document.createElement("img");
+        im.src = p.url;
+      }
       var x = document.createElement("button");
       x.innerHTML = "&times;";
       x.title = "Entfernen";
@@ -605,7 +632,9 @@
       thumbs.appendChild(d);
     });
     var n = ST.photos.length;
-    cntPhotos.textContent = n === 0 ? "Noch keine Bilder" : n + (n === 1 ? " Bild" : " Bilder");
+    var nv = 0;
+    ST.photos.forEach(function (q) { if (q.isVid) nv++; });
+    cntPhotos.textContent = n === 0 ? "Noch keine Szenen" : n + (n === 1 ? " Szene" : " Szenen") + (nv ? " · " + nv + " Clip" + (nv === 1 ? "" : "s") : "");
     btnShuffle.disabled = n < 2;
     btnClearPhotos.disabled = n === 0;
   }
@@ -673,7 +702,7 @@
       infoLine.textContent = n + " Szenen-Quellen bereit \u2013 jetzt noch Musik laden.";
       infoLine.className = "infoline";
     } else {
-      infoLine.textContent = "Jetzt Bilder hineinziehen.";
+      infoLine.textContent = "Jetzt Bilder oder Videoclips hineinziehen.";
       infoLine.className = "infoline";
     }
   }
@@ -691,13 +720,13 @@
   }
   function buildSources() {
     var src = [];
-    ST.photos.forEach(function (p) { src.push({ img: p.img, rect: { x: 0, y: 0, w: 1, h: 1 } }); });
+    ST.photos.forEach(function (p) { src.push({ img: p.img, rect: { x: 0, y: 0, w: 1, h: 1 }, vid: !!p.isVid, vidDur: p.dur || 0 }); });
     return src;
   }
   function build() {
     if (ST.mode === "style") { buildStyle(); return; }
     var n = activeCount();
-    if (!n) { infoLine.textContent = "Erst Einzelbilder laden \u2013 jedes Bild wird eine Filmszene."; infoLine.className = "infoline err"; return; }
+    if (!n) { infoLine.textContent = "Erst Material laden \u2013 Bilder oder Videoclips werden zu Filmszenen."; infoLine.className = "infoline err"; return; }
     if (!ST.audioDur) { infoLine.textContent = "Erst Musik laden \u2013 sie bestimmt die Video-L\u00e4nge."; infoLine.className = "infoline err"; return; }
     stopEverything();
     ensureGraph();
@@ -1179,7 +1208,16 @@
         p = clamp((t - (tl.INTRO + ly.i * tl.shotDur)) / tl.shotDur, 0, 1);
       }
     }
-    var kb = kenBurns(rect, img.naturalWidth, img.naturalHeight, p, cam, 16 / 9);
+    // Videoclip-Szene: Clip-Frame synchron zur Szenenzeit setzen (loopt, wenn die Szene laenger als der Clip ist)
+    var vidObj = (ly.k === "shot") ? ST.sources[ly.i % ST.sources.length] : (ly.k === "intro" ? ST.sources[0] : ST.sources[(tl.n - 1) % ST.sources.length]);
+    if (vidObj && vidObj.vid && img.readyState >= 2) {
+      var sceneStart = (ly.k === "shot") ? (tl.INTRO + ly.i * tl.shotDur) : (ly.k === "outro" ? (tl.D - tl.OUTRO) : 0);
+      var localT = Math.max(0, t - sceneStart);
+      var vd = vidObj.vidDur > 0.1 ? vidObj.vidDur : img.duration;
+      var vT = (vd && isFinite(vd) && vd > 0.1) ? (localT % vd) : 0;
+      if (Math.abs(img.currentTime - vT) > 0.08) { try { img.currentTime = Math.min(vT, Math.max(0, (vd || 1) - 0.05)); } catch (err) {} }
+    }
+    var kb = kenBurns(rect, img.naturalWidth || img.videoWidth || 1280, img.naturalHeight || img.videoHeight || 720, p, cam, 16 / 9);
     // Kino-Look: laterale/vertikale Drift + leichter Orbit-Roll + Parallax-Tiefe
     var rotK = 0, driftX = 0, driftY = 0;
     if (kino) {
@@ -1194,8 +1232,8 @@
       driftY += (kino.panY || 0) * e * kb.sh * 0.008;
     }
     var sx = kb.sx + driftX, sy = kb.sy + driftY;
-    sx = clamp(sx, 0, Math.max(0, img.naturalWidth - kb.sw));
-    sy = clamp(sy, 0, Math.max(0, img.naturalHeight - kb.sh));
+    sx = clamp(sx, 0, Math.max(0, (img.naturalWidth || img.videoWidth || 1280) - kb.sw));
+    sy = clamp(sy, 0, Math.max(0, (img.naturalHeight || img.videoHeight || 720) - kb.sh));
     ctx2.globalAlpha = ly.a;
     if (kino && (Math.abs(rotK) > 0.0004)) {
       // Overscan-Draw damit Rotation keine Ecken zeigt + Parallax: dunkler, leicht größerer Back-Layer
@@ -1539,14 +1577,14 @@
       var imgs = [], aud = null;
       for (var i = 0; i < fs.length; i++) {
         var kd = kindOf(fs[i]);
-        if (kd === "img") imgs.push(fs[i]);
+        if (kd === "img" || kd === "vid") imgs.push(fs[i]);
         if (kd === "aud") aud = fs[i];
       }
       if (aud) { setAudio(aud); }
       if (imgs.length) {
         if (multi) { handler(imgs); } else { handler(imgs[0]); }
       } else if (!aud) {
-        infoLine.textContent = "Bitte Bilddateien oder eine Audiodatei hierher ziehen.";
+        infoLine.textContent = "Bitte Bilder, Videoclips oder eine Audiodatei hierher ziehen.";
         infoLine.className = "infoline err";
       }
     });

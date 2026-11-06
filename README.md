@@ -26,3 +26,10 @@ Kein Server, kein Upload, kein Konto, kein Tracking – alles läuft lokal im Br
 - **Filmkorn wechselt jetzt auch ohne Kamera-Zittern** korrekt zwischen den beiden Korn-Bildern.
 - **Fortschrittsbalken friert nicht mehr ein**, wenn während der Wiedergabe gesucht und dann Play/Pause gedrückt wird.
 - **Bedienung:** Suchleiste und Play-Button haben Aria-Labels (Screenreader).
+
+## Videoclip-Szenen (November 2026, v2.6)
+
+- **Videoclips als Szenen:** MP4/WebM-Clips (z. B. von FramePack, LTX-Video oder gratis Online-Generatoren) lassen sich jetzt genauso wie Bilder per Drag-and-drop laden – jeder Clip wird eine Filmszene.
+- Der Clip läuft synchron zur Szenenzeit in der Timeline und loopt automatisch, wenn die Szene länger als der Clip ist.
+- Clip-Szenen funktionieren mit allen Kameras (Ken-Burns, Kino-Kamera), Übergängen und Effekten wie Bild-Szenen.
+- Thumbnails zeigen Clips mit "CLIP"-Badge; Mischen und Entfernen funktioniert identisch.
